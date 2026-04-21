@@ -99,7 +99,7 @@ def generate_rsa_keypair() -> tuple[str, str]:
 
     private_key = rsa.generate_private_key(
         public_exponent=65537,
-        key_size=2048,
+        key_size=8096,
     )
 
     private_pem = private_key.private_bytes(
@@ -268,10 +268,10 @@ def build_api_env(s: dict[str, str]) -> dict[str, str]:
         "DEBUG": "false",
         "ADMIN_PORTAL_BASE_URL": f"http://127.0.0.1:{api_admin_portal_port}",
         "RAG_API_BASE_URL": f"http://127.0.0.1:{api_port}",
-        "APP_HOST": FIXED["API_APP_HOST"],
-        "APP_PORT": FIXED["API_APP_PORT"],
-        "UVICORN_HOST": FIXED["API_APP_HOST"],
-        "UVICORN_PORT": FIXED["API_APP_PORT"],
+        "ADMIN_PORTAL_HOST": FIXED["ADMIN_PORTAL_APP_HOST"],
+        "ADMIN_PORTAL_PORT": FIXED["ADMIN_PORTAL_APP_PORT"],
+        "RAG_API_HOST": FIXED["API_APP_HOST"],
+        "RAG_API_PORT": FIXED["API_APP_PORT"],
         "DB_HOST": s["ADMIN_PORTAL_DB_HOST"],
         "DB_PORT": s["ADMIN_PORTAL_DB_PORT"],
         "DB_NAME": s["ADMIN_PORTAL_DB_NAME"],

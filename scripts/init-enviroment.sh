@@ -197,6 +197,115 @@ clone_repos() {
 }
 
 # ---------------------------------------------------------------------------
+# Instalar dependencias dos repositorios
+# ---------------------------------------------------------------------------
+install_repo_deps() {
+  log "==============================="
+  log " Instalando dependencias dos repositorios"
+  log "==============================="
+
+  local failed=0
+
+  for entry in "${REPOS[@]}"; do
+    local folder="${entry%%|*}"
+    local dest="$REPS_DIR/$folder"
+
+    if [[ ! -d "$dest/.git" ]]; then
+      skip "$folder — repositorio nao encontrado, ignorando"
+      continue
+    fi
+
+    # Node.js — package.json presente
+    if [[ -f "$dest/package.json" ]]; then
+      log "$folder — executando npm install ..."
+      if (cd "$dest" && npm install >> "$LOG_FILE" 2>&1); then
+        ok "$folder — npm install concluido"
+      else
+        err "$folder — npm install falhou"
+        failed=$(( failed + 1 ))
+      fi
+    fi
+
+    # Python — requirements.txt ou pyproject.toml presente
+    if [[ -f "$dest/requirements.txt" || -f "$dest/pyproject.toml" ]]; then
+      log "$folder — criando/atualizando .venv ..."
+      if python3 -m venv "$dest/.venv" >> "$LOG_FILE" 2>&1; then
+        ok "$folder — .venv criado"
+      else
+        err "$folder — falha ao criar .venv"
+        failed=$(( failed + 1 ))
+        continue
+      fi
+
+      if [[ -f "$dest/requirements.txt" ]]; then
+        log "$folder — instalando requirements.txt ..."
+        if "$dest/.venv/bin/pip" install -r "$dest/requirements.txt" >> "$LOG_FILE" 2>&1; then
+          ok "$folder — requirements.txt instalado"
+        else
+          err "$folder — falha ao instalar requirements.txt"
+          failed=$(( failed + 1 ))
+        fi
+      elif [[ -f "$dest/pyproject.toml" ]]; then
+        log "$folder — instalando pyproject.toml (pip install -e) ..."
+        if "$dest/.venv/bin/pip" install -e "$dest" >> "$LOG_FILE" 2>&1; then
+          ok "$folder — pyproject.toml instalado"
+        else
+          err "$folder — falha ao instalar pyproject.toml"
+          failed=$(( failed + 1 ))
+        fi
+      fi
+    fi
+
+    if [[ ! -f "$dest/package.json" && ! -f "$dest/requirements.txt" && ! -f "$dest/pyproject.toml" ]]; then
+      skip "$folder — nenhum manifesto de dependencias encontrado"
+    fi
+  done
+
+  if (( failed > 0 )); then
+    err "$failed repositorio(s) com falha. Verifique $LOG_FILE"
+    return 1
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Sincronizar senha do Postgres com o .env
+# ---------------------------------------------------------------------------
+sync_pg_password() {
+  log "==============================="
+  log " Sincronizando senha do Postgres"
+  log "==============================="
+
+  local env_file="$WORKSPACE_DIR/config/secrets/.env"
+
+  if [[ ! -f "$env_file" ]]; then
+    err "Arquivo .env nao encontrado: $env_file"
+    return 1
+  fi
+
+  local db_user db_password
+  db_user=$(grep "^DB_USER=" "$env_file" | cut -d= -f2)
+  db_password=$(grep "^DB_PASSWORD=" "$env_file" | cut -d= -f2)
+
+  if [[ -z "$db_user" || -z "$db_password" ]]; then
+    err "DB_USER ou DB_PASSWORD nao encontrados em $env_file"
+    return 1
+  fi
+
+  if ! command -v psql &>/dev/null; then
+    err "psql nao encontrado — instale postgresql-client"
+    return 1
+  fi
+
+  log "Atualizando senha do usuario '$db_user' no Postgres ..."
+  if sudo -u postgres psql -c "ALTER USER $db_user WITH PASSWORD '$db_password';" >> "$LOG_FILE" 2>&1; then
+    ok "Senha de '$db_user' sincronizada com o .env"
+  else
+    err "Falha ao atualizar senha do '$db_user'. Verifique $LOG_FILE"
+    return 1
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 main() {
@@ -205,6 +314,8 @@ main() {
   install_system_deps
   install_rust
   clone_repos
+  install_repo_deps
+  sync_pg_password
   log "Concluido."
 }
 
